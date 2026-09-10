@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Tracker cicilan/utang pribadi — catat pembayaran, lihat sisa utang dan progres pelunasan secara otomatis.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+<title>Tracker Cicilan Laptop</title>
+<style>
+  :root {
+    --bg: #faf9f6;
+    --card: #ffffff;
+    --border: #e5e2da;
+    --text: #1a1a1a;
+    --text-secondary: #6b6a65;
+    --accent: #185fa5;
+    --accent-bg: #e6f1fb;
+    --success: #3b6d11;
+    --success-bg: #eaf3de;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --input-bg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17171a;
+      --card: #232326;
+      --border: #38383c;
+      --text: #f2f1ee;
+      --text-secondary: #9b9a95;
+      --accent: #6cabe8;
+      --accent-bg: #1e3a52;
+      --success: #8fc25f;
+      --success-bg: #223a12;
+      --danger: #e28888;
+      --danger-bg: #3d1f1f;
+      --input-bg: #2b2b2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 1.25rem 1rem 3rem;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 1.25rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    margin-bottom: 1rem;
+  }
+  label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+  input, select {
+    width: 100%;
+    max-width: 100%;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0 8px;
+    font-size: 14px;
+    background: var(--input-bg);
+    color: var(--text);
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  input[type="date"] {
+    font-size: 13px;
+  }
+  input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; gap: 8px; align-items: flex-start; }
+  .row > div { min-width: 0; overflow: hidden; }
+  .field { margin-bottom: 10px; width: 100%; }
+  .field:last-child { margin-bottom: 0; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 1rem; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem; min-width: 0; }
+  .stat-label { font-size: 12px; color: var(--text-secondary); margin: 0 0 4px; }
+  .stat-value { font-size: 20px; font-weight: 600; margin: 0; overflow-wrap: break-word; }
+  .stat-value.remaining { color: var(--danger); }
+  .stat-value.paid { color: var(--success); }
+  .progress-bar {
+    height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 8px;
+  }
+  .progress-fill { height: 100%; background: var(--success); border-radius: 4px; transition: width 0.3s; }
+  button {
+    height: 44px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:active { opacity: 0.85; }
+  button.ghost { background: transparent; }
+  button.small { height: 38px; font-size: 13px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .entry-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .entry-row:last-child { border-bottom: none; }
+  .entry-left p { margin: 0; }
+  .entry-date { font-size: 12px; color: var(--text-secondary); }
+  .entry-amt { font-size: 14px; font-weight: 500; }
+  .entry-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: 8px; }
+  .icon-btn {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+    font-size: 13px; padding: 0; flex-shrink: 0;
+  }
+  .edit-btn { background: var(--accent-bg); color: var(--accent); }
+  .del-btn { background: var(--danger-bg); color: var(--danger); }
+  .empty { font-size: 13px; color: var(--text-secondary); text-align: center; padding: 1rem 0; }
+  .err { font-size: 13px; color: var(--danger); margin-top: 6px; display: none; }
+  .section-title { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px;
+    background: var(--success-bg); color: var(--success);
+  }
+  .edit-badge {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px;
+    background: var(--accent-bg); color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .add-row { display: flex; gap: 8px; margin-top: 10px; }
+  .add-row input[type="text"], .add-row input[type="number"] { flex: 1; }
+  .form-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .form-actions button { flex: 1; }
+  .backup-row { display: flex; gap: 8px; margin-top: 1rem; }
+  .backup-row button { flex: 1; }
+  .toast {
+    position: fixed;
+    left: 1rem; right: 1rem; bottom: 1.25rem;
+    max-width: 448px; margin: 0 auto;
+    background: var(--text); color: var(--bg);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    z-index: 100;
+  }
+  .toast p { margin: 0; font-size: 14px; }
+  .toast button {
+    height: 32px; padding: 0 12px;
+    background: transparent; color: var(--bg);
+    border: 1px solid var(--bg);
+    font-size: 13px; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Tracker cicilan laptop</h1>
+  <p class="sub">Utang ke Mas — bayar berapa pun sesuai kemampuan tiap periode, sisa terhitung otomatis.</p>
+
+  <div class="card">
+    <div class="field">
+      <label for="totalDebt">Total utang awal (Rp)</label>
+      <input type="text" inputmode="numeric" id="totalDebt" placeholder="8.343.700">
+      <p class="err" id="totalDebtErr">Isi total utang dengan angka lebih dari 0.</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <p class="stat-label">Sudah dibayar</p>
+      <p class="stat-value paid" id="statPaid">Rp0</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Sisa utang</p>
+      <p class="stat-value remaining" id="statRemaining">Rp0</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="stat-label" style="margin-bottom:6px;">Progres pelunasan</p>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%;"></div></div>
+    <p style="font-size:12px; color:var(--text-secondary); margin:6px 0 0;" id="progressPct">0% lunas</p>
+  </div>
+
+  <div class="card">
+    <p class="section-title">Catat pembayaran</p>
+    <span class="edit-badge" id="editBadge" style="display:none;">Mengedit pembayaran</span>
+    <div class="row" style="margin-bottom:10px;">
+      <div style="flex: 1.15; min-width: 0;">
+        <label for="payDate">Tanggal</label>
+        <input type="date" id="payDate">
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <label for="payAmt">Nominal (Rp)</label>
+        <input type="text" inputmode="numeric" id="payAmt" placeholder="500.000">
+      </div>
+    </div>
+    <div class="field">
+      <label for="payNote">Catatan (opsional)</label>
+      <input type="text" id="payNote" placeholder="mis. cicilan minggu 1">
+    </div>
+    <p class="err" id="err"></p>
+    <div class="form-actions">
+      <button class="primary" id="addBtn" style="width:100%; margin-top:4px;">Tambah pembayaran</button>
+      <button class="ghost" id="cancelEditBtn" style="display:none; margin-top:4px;">Batal</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="section-title">Riwayat pembayaran</p>
+    <div id="history"></div>
+  </div>
+
+  <div class="backup-row">
+    <button class="small" id="exportBtn">Export data</button>
+    <button class="small" id="importBtn">Import data</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+  </div>
+
+  <div style="text-align:center; margin-top:1rem;">
+    <button class="ghost" id="resetBtn" style="color:var(--danger); border-color:var(--danger);">Reset semua data</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none;">
+  <p id="toastMsg"></p>
+  <button id="undoBtn">Undo</button>
+</div>
+
+<script>
+const KEY = 'cicilan-laptop-entries';
+const DEBT_KEY = 'cicilan-laptop-total';
+const DEFAULT_TOTAL = 8343700;
+
+function loadEntries() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveEntries(entries) {
+  localStorage.setItem(KEY, JSON.stringify(entries));
+}
+function loadTotal() {
+  const raw = localStorage.getItem(DEBT_KEY);
+  return raw ? parseFloat(raw) : DEFAULT_TOTAL;
+}
+function saveTotal(v) {
+  localStorage.setItem(DEBT_KEY, String(v));
+}
+
+function fmtRp(n) {
+  return 'Rp' + Math.round(n).toLocaleString('id-ID');
+}
+function fmtDate(dStr) {
+  const d = new Date(dStr + 'T00:00:00');
+  const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+function parseRupiah(str) {
+  return parseInt(String(str).replace(/[^\d]/g, ''), 10) || 0;
+}
+function formatInputRupiah(el) {
+  const raw = parseRupiah(el.value);
+  el.value = raw ? raw.toLocaleString('id-ID') : '';
+}
+
+const elTotalDebt = document.getElementById('totalDebt');
+const elTotalDebtErr = document.getElementById('totalDebtErr');
+const elPayDate = document.getElementById('payDate');
+const elPayAmt = document.getElementById('payAmt');
+const elPayNote = document.getElementById('payNote');
+const elErr = document.getElementById('err');
+const elHistory = document.getElementById('history');
+const elStatPaid = document.getElementById('statPaid');
+const elStatRemaining = document.getElementById('statRemaining');
+const elProgressFill = document.getElementById('progressFill');
+const elProgressPct = document.getElementById('progressPct');
+const elToast = document.getElementById('toast');
+const elToastMsg = document.getElementById('toastMsg');
+const elUndoBtn = document.getElementById('undoBtn');
+const elAddBtn = document.getElementById('addBtn');
+const elCancelEditBtn = document.getElementById('cancelEditBtn');
+const elEditBadge = document.getElementById('editBadge');
+const elExportBtn = document.getElementById('exportBtn');
+const elImportBtn = document.getElementById('importBtn');
+const elImportFile = document.getElementById('importFile');
+
+let toastTimer = null;
+let pendingRestore = null;
+let editingId = null;
+
+function showToast(message, restoreFn, duration) {
+  clearTimeout(toastTimer);
+  elToastMsg.textContent = message;
+  elToast.style.display = 'flex';
+  pendingRestore = restoreFn;
+  toastTimer = setTimeout(() => {
+    elToast.style.display = 'none';
+    pendingRestore = null;
+  }, duration || 8000);
+}
+
+elUndoBtn.addEventListener('click', () => {
+  if (pendingRestore) {
+    pendingRestore();
+    pendingRestore = null;
+  }
+  clearTimeout(toastTimer);
+  elToast.style.display = 'none';
+  render();
+});
+
+elTotalDebt.value = loadTotal().toLocaleString('id-ID');
+elPayDate.value = new Date().toISOString().split('T')[0];
+
+function enterEditMode(entry) {
+  editingId = entry.id;
+  elPayDate.value = entry.date;
+  elPayAmt.value = entry.amount.toLocaleString('id-ID');
+  elPayNote.value = entry.note || '';
+  elAddBtn.textContent = 'Update pembayaran';
+  elCancelEditBtn.style.display = 'block';
+  elEditBadge.style.display = 'inline-block';
+  elErr.style.display = 'none';
+  document.getElementById('payAmt').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function exitEditMode() {
+  editingId = null;
+  elPayDate.value = new Date().toISOString().split('T')[0];
+  elPayAmt.value = '';
+  elPayNote.value = '';
+  elAddBtn.textContent = 'Tambah pembayaran';
+  elCancelEditBtn.style.display = 'none';
+  elEditBadge.style.display = 'none';
+  elErr.style.display = 'none';
+}
+
+elCancelEditBtn.addEventListener('click', exitEditMode);
+
+function render() {
+  const entries = loadEntries().sort((a, b) => a.date.localeCompare(b.date));
+  const total = parseRupiah(elTotalDebt.value);
+  const paid = entries.reduce((sum, e) => sum + e.amount, 0);
+  const remaining = Math.max(total - paid, 0);
+  const pct = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
+
+  elTotalDebtErr.style.display = total > 0 ? 'none' : 'block';
+
+  elStatPaid.textContent = fmtRp(paid);
+  elStatRemaining.textContent = fmtRp(remaining);
+  elProgressFill.style.width = pct.toFixed(1) + '%';
+  elProgressPct.textContent = pct.toFixed(0) + '% lunas' + (remaining === 0 && total > 0 ? ' — sudah tuntas!' : '');
+
+  if (entries.length === 0) {
+    elHistory.innerHTML = '<p class="empty">Belum ada pembayaran tercatat.</p>';
+    return;
+  }
+
+  elHistory.innerHTML = '';
+  entries.slice().reverse().forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+    row.innerHTML = `
+      <div class="entry-left">
+        <p class="entry-amt">${fmtRp(e.amount)}</p>
+        <p class="entry-date">${fmtDate(e.date)}${e.note ? ' · ' + e.note : ''}</p>
+      </div>
+      <div class="entry-actions">
+        <button class="icon-btn edit-btn" data-id="${e.id}" aria-label="Edit">✎</button>
+        <button class="icon-btn del-btn" data-id="${e.id}" aria-label="Hapus">✕</button>
+      </div>
+    `;
+    elHistory.appendChild(row);
+  });
+
+  elHistory.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const entry = loadEntries().find(e => String(e.id) === id);
+      if (entry) enterEditMode(entry);
+    });
+  });
+
+  elHistory.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const all = loadEntries();
+      const deleted = all.find(e => String(e.id) === id);
+      const kept = all.filter(e => String(e.id) !== id);
+      saveEntries(kept);
+      if (editingId && String(editingId) === id) exitEditMode();
+      render();
+      if (deleted) {
+        showToast('Pembayaran ' + fmtRp(deleted.amount) + ' dihapus', () => {
+          const current = loadEntries();
+          current.push(deleted);
+          saveEntries(current);
+        });
+      }
+    });
+  });
+}
+
+elAddBtn.addEventListener('click', () => {
+  const date = elPayDate.value;
+  const amt = parseRupiah(elPayAmt.value);
+  const note = elPayNote.value.trim();
+
+  if (!date || !amt || amt <= 0) {
+    elErr.textContent = 'Isi tanggal dan nominal pembayaran yang valid.';
+    elErr.style.display = 'block';
+    return;
+  }
+  elErr.style.display = 'none';
+
+  const entries = loadEntries();
+  if (editingId) {
+    const idx = entries.findIndex(e => String(e.id) === String(editingId));
+    if (idx !== -1) entries[idx] = { ...entries[idx], date, amount: amt, note };
+    saveEntries(entries);
+    exitEditMode();
+  } else {
+    entries.push({ id: Date.now(), date, amount: amt, note });
+    saveEntries(entries);
+    elPayAmt.value = '';
+    elPayNote.value = '';
+  }
+  render();
+});
+
+elTotalDebt.addEventListener('input', () => {
+  formatInputRupiah(elTotalDebt);
+  saveTotal(parseRupiah(elTotalDebt.value));
+  render();
+});
+
+elPayAmt.addEventListener('input', () => {
+  formatInputRupiah(elPayAmt);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (confirm('Hapus semua riwayat pembayaran?')) {
+    const backup = loadEntries();
+    localStorage.removeItem(KEY);
+    exitEditMode();
+    render();
+    if (backup.length > 0) {
+      showToast('Semua riwayat (' + backup.length + ' data) dihapus', () => {
+        saveEntries(backup);
+      }, 10000);
+    }
+  }
+});
+
+elExportBtn.addEventListener('click', () => {
+  const data = {
+    total: loadTotal(),
+    entries: loadEntries(),
+    exportedAt: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `cicilan-laptop-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+elImportBtn.addEventListener('click', () => elImportFile.click());
+
+elImportFile.addEventListener('change', () => {
+  const file = elImportFile.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!Array.isArray(data.entries)) throw new Error('format tidak valid');
+      if (!confirm(`Import ${data.entries.length} data pembayaran? Ini akan menimpa data yang ada saat ini.`)) return;
+      saveEntries(data.entries);
+      if (typeof data.total === 'number' && data.total > 0) {
+        saveTotal(data.total);
+        elTotalDebt.value = data.total.toLocaleString('id-ID');
+      }
+      exitEditMode();
+      render();
+    } catch (e) {
+      alert('Gagal import: file JSON tidak valid.');
+    } finally {
+      elImportFile.value = '';
+    }
+  };
+  reader.readAsText(file);
+});
+
+render();
+</script>
+</body>
+</html>

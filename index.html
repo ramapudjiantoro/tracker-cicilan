@@ -7,11 +7,11 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
 <title>Tracker Cicilan Laptop</title>
 <style>
-  :root {Utang ke Mas Dykall —
+  :root {
     --bg: #faf9f6;
     --card: #ffffff;
     --border: #e5e2da;
-    --text: #1a1Utang ke Mas Dykall —a1a;
+    --text: #1a1a1a;
     --text-secondary: #6b6a65;
     --accent: #185fa5;
     --accent-bg: #e6f1fb;
@@ -121,6 +121,11 @@
   }
   .edit-btn { background: var(--accent-bg); color: var(--accent); }
   .del-btn { background: var(--danger-bg); color: var(--danger); }
+  .entry-proof {
+    width: 36px; height: 36px; border-radius: 6px; object-fit: cover;
+    margin-left: 8px; flex-shrink: 0; cursor: pointer; border: 1px solid var(--border);
+  }
+  .proof-preview { max-width: 120px; max-height: 120px; border-radius: 8px; margin-top: 8px; display: none; }
   .empty { font-size: 13px; color: var(--text-secondary); text-align: center; padding: 1rem 0; }
   .err { font-size: 13px; color: var(--danger); margin-top: 6px; display: none; }
   .section-title { font-size: 14px; font-weight: 600; margin: 0 0 10px; }
@@ -208,6 +213,11 @@
     <div class="field">
       <label for="payNote">Catatan (opsional)</label>
       <input type="text" id="payNote" placeholder="mis. cicilan minggu 1">
+    </div>
+    <div class="field">
+      <label for="payProof">Bukti transfer (opsional)</label>
+      <input type="file" accept="image/*" id="payProof">
+      <img id="payProofPreview" class="proof-preview" alt="Preview bukti transfer">
     </div>
     <p class="err" id="err"></p>
     <div class="form-actions">
@@ -325,7 +335,7 @@ onAuthStateChanged(auth, user => {
     } else {
       setDoc(trackerDocRef, { entries: entriesCache, total: totalCache });
     }
-    setSyncStatus('✅ Tersambung');
+    setSyncStatus('✅ Tersambung — data sinkron semua device');
   }, err => {
     console.error('Firestore listener error:', err);
     setSyncStatus('⚠️ Gagal sync, pakai data lokal (offline)');
@@ -368,10 +378,58 @@ const elEditBadge = document.getElementById('editBadge');
 const elExportBtn = document.getElementById('exportBtn');
 const elImportBtn = document.getElementById('importBtn');
 const elImportFile = document.getElementById('importFile');
+const elPayProof = document.getElementById('payProof');
+const elPayProofPreview = document.getElementById('payProofPreview');
 
 let toastTimer = null;
 let pendingRestore = null;
 let editingId = null;
+let pendingProof = null;
+
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else if (height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function showProofPreview(src) {
+  if (src) {
+    elPayProofPreview.src = src;
+    elPayProofPreview.style.display = 'block';
+  } else {
+    elPayProofPreview.src = '';
+    elPayProofPreview.style.display = 'none';
+  }
+}
+
+elPayProof.addEventListener('change', async () => {
+  const file = elPayProof.files[0];
+  if (!file) return;
+  try {
+    pendingProof = await compressImage(file, 480, 0.6);
+    showProofPreview(pendingProof);
+  } catch {
+    pendingProof = null;
+    showProofPreview(null);
+  }
+});
 
 function showToast(message, restoreFn, duration) {
   clearTimeout(toastTimer);
@@ -402,6 +460,9 @@ function enterEditMode(entry) {
   elPayDate.value = entry.date;
   elPayAmt.value = entry.amount.toLocaleString('id-ID');
   elPayNote.value = entry.note || '';
+  pendingProof = entry.proof || null;
+  elPayProof.value = '';
+  showProofPreview(pendingProof);
   elAddBtn.textContent = 'Update pembayaran';
   elCancelEditBtn.style.display = 'block';
   elEditBadge.style.display = 'inline-block';
@@ -414,6 +475,9 @@ function exitEditMode() {
   elPayDate.value = new Date().toISOString().split('T')[0];
   elPayAmt.value = '';
   elPayNote.value = '';
+  elPayProof.value = '';
+  pendingProof = null;
+  showProofPreview(null);
   elAddBtn.textContent = 'Tambah pembayaran';
   elCancelEditBtn.style.display = 'none';
   elEditBadge.style.display = 'none';
@@ -450,12 +514,20 @@ function render() {
         <p class="entry-amt">${fmtRp(e.amount)}</p>
         <p class="entry-date">${fmtDate(e.date)}${e.note ? ' · ' + e.note : ''}</p>
       </div>
+      ${e.proof ? `<img class="entry-proof" src="${e.proof}" data-id="${e.id}" alt="Bukti transfer">` : ''}
       <div class="entry-actions">
         <button class="icon-btn edit-btn" data-id="${e.id}" aria-label="Edit">✎</button>
         <button class="icon-btn del-btn" data-id="${e.id}" aria-label="Hapus">✕</button>
       </div>
     `;
     elHistory.appendChild(row);
+  });
+
+  elHistory.querySelectorAll('.entry-proof').forEach(img => {
+    img.addEventListener('click', () => {
+      const w = window.open();
+      if (w) w.document.write(`<title>Bukti transfer</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${img.src}" style="max-width:100%;max-height:100vh;"></body>`);
+    });
   });
 
   elHistory.querySelectorAll('.edit-btn').forEach(btn => {
@@ -501,14 +573,17 @@ elAddBtn.addEventListener('click', () => {
   const entries = loadEntries();
   if (editingId) {
     const idx = entries.findIndex(e => String(e.id) === String(editingId));
-    if (idx !== -1) entries[idx] = { ...entries[idx], date, amount: amt, note };
+    if (idx !== -1) entries[idx] = { ...entries[idx], date, amount: amt, note, proof: pendingProof };
     saveEntries(entries);
     exitEditMode();
   } else {
-    entries.push({ id: Date.now(), date, amount: amt, note });
+    entries.push({ id: Date.now(), date, amount: amt, note, proof: pendingProof });
     saveEntries(entries);
     elPayAmt.value = '';
     elPayNote.value = '';
+    elPayProof.value = '';
+    pendingProof = null;
+    showProofPreview(null);
   }
   render();
 });

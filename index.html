@@ -165,6 +165,7 @@
 <div class="wrap">
   <h1>Tracker cicilan laptop</h1>
   <p class="sub">Utang ke Mas — bayar berapa pun sesuai kemampuan tiap periode, sisa terhitung otomatis.</p>
+  <p class="sub" id="syncStatus" style="margin-top:-0.75rem;">⏳ Menyambungkan...</p>
 
   <div class="card">
     <div class="field">
@@ -236,27 +237,100 @@
   <button id="undoBtn">Undo</button>
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB2W0uGqocau9IaKxMbiqg7FMfsgJUJEOM",
+  authDomain: "tracker-cicilan.firebaseapp.com",
+  projectId: "tracker-cicilan",
+  storageBucket: "tracker-cicilan.firebasestorage.app",
+  messagingSenderId: "208276269077",
+  appId: "1:208276269077:web:e81ebe1ccb5e4f8a1fc61c"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+const trackerDocRef = doc(db, 'tracker', 'shared');
+
 const KEY = 'cicilan-laptop-entries';
 const DEBT_KEY = 'cicilan-laptop-total';
 const DEFAULT_TOTAL = 8343700;
 
-function loadEntries() {
+let entriesCache = loadLocalEntries();
+let totalCache = loadLocalTotal();
+let applyingRemoteUpdate = false;
+
+function loadLocalEntries() {
   try {
     const raw = localStorage.getItem(KEY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
-function saveEntries(entries) {
-  localStorage.setItem(KEY, JSON.stringify(entries));
-}
-function loadTotal() {
+function loadLocalTotal() {
   const raw = localStorage.getItem(DEBT_KEY);
   return raw ? parseFloat(raw) : DEFAULT_TOTAL;
 }
-function saveTotal(v) {
-  localStorage.setItem(DEBT_KEY, String(v));
+
+function loadEntries() {
+  return entriesCache;
 }
+function loadTotal() {
+  return totalCache;
+}
+function persist(entries, total) {
+  entriesCache = entries;
+  totalCache = total;
+  localStorage.setItem(KEY, JSON.stringify(entries));
+  localStorage.setItem(DEBT_KEY, String(total));
+  if (!applyingRemoteUpdate) {
+    setDoc(trackerDocRef, { entries, total }).catch(err => {
+      console.error('Gagal sync ke Firestore:', err);
+      setSyncStatus('⚠️ Gagal sync, cek koneksi');
+    });
+  }
+}
+function saveEntries(entries) {
+  persist(entries, totalCache);
+}
+function saveTotal(v) {
+  persist(entriesCache, v);
+}
+
+function setSyncStatus(text) {
+  const el = document.getElementById('syncStatus');
+  if (el) el.textContent = text;
+}
+
+signInAnonymously(auth).catch(err => {
+  console.error('Gagal login anonim:', err);
+  setSyncStatus('⚠️ Gagal konek (mode offline)');
+});
+
+onAuthStateChanged(auth, user => {
+  if (!user) return;
+  onSnapshot(trackerDocRef, snap => {
+    if (snap.exists()) {
+      const data = snap.data();
+      applyingRemoteUpdate = true;
+      entriesCache = Array.isArray(data.entries) ? data.entries : [];
+      totalCache = typeof data.total === 'number' ? data.total : totalCache;
+      localStorage.setItem(KEY, JSON.stringify(entriesCache));
+      localStorage.setItem(DEBT_KEY, String(totalCache));
+      elTotalDebt.value = totalCache.toLocaleString('id-ID');
+      if (!editingId) render();
+      applyingRemoteUpdate = false;
+    } else {
+      setDoc(trackerDocRef, { entries: entriesCache, total: totalCache });
+    }
+    setSyncStatus('✅ Tersambung — data sinkron semua device');
+  }, err => {
+    console.error('Firestore listener error:', err);
+    setSyncStatus('⚠️ Gagal sync, pakai data lokal (offline)');
+  });
+});
 
 function fmtRp(n) {
   return 'Rp' + Math.round(n).toLocaleString('id-ID');
@@ -452,7 +526,7 @@ elPayAmt.addEventListener('input', () => {
 document.getElementById('resetBtn').addEventListener('click', () => {
   if (confirm('Hapus semua riwayat pembayaran?')) {
     const backup = loadEntries();
-    localStorage.removeItem(KEY);
+    saveEntries([]);
     exitEditMode();
     render();
     if (backup.length > 0) {

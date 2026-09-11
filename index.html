@@ -215,8 +215,8 @@
       <input type="text" id="payNote" placeholder="mis. cicilan minggu 1">
     </div>
     <div class="field">
-      <label for="payProof">Bukti transfer (opsional)</label>
-      <input type="file" accept="image/*" id="payProof">
+      <label for="payProof">Bukti transfer (wajib)</label>
+      <input type="file" accept="image/*" id="payProof" required>
       <img id="payProofPreview" class="proof-preview" alt="Preview bukti transfer">
     </div>
     <p class="err" id="err"></p>
@@ -540,6 +540,7 @@ function render() {
 
   elHistory.querySelectorAll('.del-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!confirm('Hapus pembayaran ini?')) return;
       const id = btn.getAttribute('data-id');
       const all = loadEntries();
       const deleted = all.find(e => String(e.id) === id);
@@ -565,6 +566,11 @@ elAddBtn.addEventListener('click', () => {
 
   if (!date || !amt || amt <= 0) {
     elErr.textContent = 'Isi tanggal dan nominal pembayaran yang valid.';
+    elErr.style.display = 'block';
+    return;
+  }
+  if (!pendingProof) {
+    elErr.textContent = 'Bukti transfer wajib diunggah.';
     elErr.style.display = 'block';
     return;
   }

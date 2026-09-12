@@ -231,14 +231,8 @@
     <div id="history"></div>
   </div>
 
-  <div class="backup-row">
-    <button class="small" id="exportBtn">Export data</button>
-    <button class="small" id="importBtn">Import data</button>
-    <input type="file" id="importFile" accept="application/json" style="display:none;">
-  </div>
-
   <div style="text-align:center; margin-top:1rem;">
-    <button class="ghost" id="resetBtn" style="color:var(--danger); border-color:var(--danger);">Reset semua data</button>
+    <button class="small" id="exportBtn" style="width:100%;">Export data (CSV)</button>
   </div>
 </div>
 
@@ -376,8 +370,6 @@ const elAddBtn = document.getElementById('addBtn');
 const elCancelEditBtn = document.getElementById('cancelEditBtn');
 const elEditBadge = document.getElementById('editBadge');
 const elExportBtn = document.getElementById('exportBtn');
-const elImportBtn = document.getElementById('importBtn');
-const elImportFile = document.getElementById('importFile');
 const elPayProof = document.getElementById('payProof');
 const elPayProofPreview = document.getElementById('payProofPreview');
 
@@ -630,63 +622,34 @@ elPayAmt.addEventListener('input', () => {
   formatInputRupiah(elPayAmt);
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  if (confirm('Hapus semua riwayat pembayaran?')) {
-    const backup = loadEntries();
-    saveEntries([]);
-    exitEditMode();
-    render();
-    if (backup.length > 0) {
-      showToast('Semua riwayat (' + backup.length + ' data) dihapus', () => {
-        saveEntries(backup);
-      }, 10000);
-    }
-  }
-});
+function csvEscape(val) {
+  const s = String(val ?? '');
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
 
 elExportBtn.addEventListener('click', () => {
-  const data = {
-    total: loadTotal(),
-    entries: loadEntries(),
-    exportedAt: new Date().toISOString()
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const entries = loadEntries().slice().sort((a, b) => a.date.localeCompare(b.date));
+  const rows = [['Tanggal', 'Nominal (Rp)', 'Catatan', 'Ada Bukti Transfer']];
+  entries.forEach(e => {
+    rows.push([fmtDate(e.date), e.amount, e.note || '', e.proof ? 'Ya' : 'Tidak']);
+  });
+  rows.push([]);
+  rows.push(['Total utang awal', loadTotal()]);
+  rows.push(['Sudah dibayar', entries.reduce((sum, e) => sum + e.amount, 0)]);
+  rows.push(['Sisa utang', Math.max(loadTotal() - entries.reduce((sum, e) => sum + e.amount, 0), 0)]);
+
+  const csv = '﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const dateStr = new Date().toISOString().split('T')[0];
   a.href = url;
-  a.download = `cicilan-laptop-backup-${dateStr}.json`;
+  a.download = `cicilan-laptop-${dateStr}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-});
-
-elImportBtn.addEventListener('click', () => elImportFile.click());
-
-elImportFile.addEventListener('change', () => {
-  const file = elImportFile.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(reader.result);
-      if (!Array.isArray(data.entries)) throw new Error('format tidak valid');
-      if (!confirm(`Import ${data.entries.length} data pembayaran? Ini akan menimpa data yang ada saat ini.`)) return;
-      saveEntries(data.entries);
-      if (typeof data.total === 'number' && data.total > 0) {
-        saveTotal(data.total);
-        elTotalDebt.value = data.total.toLocaleString('id-ID');
-      }
-      exitEditMode();
-      render();
-    } catch (e) {
-      alert('Gagal import: file JSON tidak valid.');
-    } finally {
-      elImportFile.value = '';
-    }
-  };
-  reader.readAsText(file);
 });
 
 render();

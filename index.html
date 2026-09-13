@@ -241,6 +241,7 @@
   <button id="undoBtn">Undo</button>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
@@ -258,6 +259,20 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const trackerDocRef = doc(db, 'tracker', 'shared');
+
+const EMAILJS_PUBLIC_KEY = 'z6S5-IxWjeS5hUySG';
+const EMAILJS_SERVICE_ID = 'service_mjpvmni';
+const EMAILJS_TEMPLATE_ID = 'template_l0mtsap';
+emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+
+function sendPaymentNotification(date, amt, note, remaining) {
+  emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+    date: fmtDate(date),
+    amount: fmtRp(amt),
+    note: note || '-',
+    remaining: fmtRp(remaining)
+  }).catch(err => console.error('Gagal kirim email notifikasi:', err));
+}
 
 const KEY = 'cicilan-laptop-entries';
 const DEBT_KEY = 'cicilan-laptop-total';
@@ -603,6 +618,8 @@ elAddBtn.addEventListener('click', () => {
   } else {
     entries.push({ id: Date.now(), date, amount: amt, note, proof: pendingProof });
     saveEntries(entries);
+    const remaining = Math.max(loadTotal() - entries.reduce((sum, e) => sum + e.amount, 0), 0);
+    sendPaymentNotification(date, amt, note, remaining);
     elPayAmt.value = '';
     elPayNote.value = '';
     elPayProof.value = '';
